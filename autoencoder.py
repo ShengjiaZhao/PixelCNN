@@ -16,9 +16,9 @@ def trainAE(conf, data):
     decoder = PixelCNN(decoder_X, conf, latent_code)
     y = decoder.pred
     tf.scalar_summary('loss', decoder.loss)
-
+    tf.scalar_summary('reg_loss', encoder.reg_loss)
     trainer = tf.train.RMSPropOptimizer(1e-3)
-    gradients = trainer.compute_gradients(decoder.loss)
+    gradients = trainer.compute_gradients(decoder.loss + encoder.reg_loss)
 
     clipped_gradients = [(tf.clip_by_value(_[0], -conf.grad_clip, conf.grad_clip), _[1]) for _ in gradients]
     optimizer = trainer.apply_gradients(clipped_gradients)

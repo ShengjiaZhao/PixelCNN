@@ -68,7 +68,7 @@ class PixelCNN(object):
             self.pred = tf.reshape(tf.argmax(tf.nn.softmax(self.fc2), dimension=tf.rank(self.fc2) - 1), tf.shape(self.X))
 
 
-class ConvolutionalEncoder(object):
+class ConvolutionalEncoderOld(object):
     def __init__(self, X, conf):
         '''
             This is the 6-layer architecture for Convolutional Autoencoder
@@ -99,3 +99,49 @@ class ConvolutionalEncoder(object):
         self.pred = tf.nn.softmax(tf.add(tf.matmul(conv3_reshape, W_fc), b_fc))
 
 
+
+class ConvolutionalEncoder(object):
+    def __init__(self, X, conf):
+        '''
+            This is the 6-layer architecture for Convolutional Autoencoder
+            mentioned in the original paper:
+            Stacked Convolutional Auto-Encoders for Hierarchical Feature Extraction
+
+            Note that only the encoder part is implemented as PixelCNN is taken
+            as the decoder.
+        '''
+
+        conv1 = tf.contrib.layers.convolution2d(X, 64, [4, 4], [2, 2],
+                                                weights_initializer=tf.contrib.layers.xavier_initializer(),
+                                                weights_regularizer=tf.contrib.layers.l2_regularizer(2.5e-5),
+                                                activation_fn=tf.identity)
+        conv1 = lrelu(conv1)
+        conv2 = tf.contrib.layers.convolution2d(conv1, 128, [4, 4], [2, 2],
+                                                weights_initializer=tf.contrib.layers.xavier_initializer(),
+                                                weights_regularizer=tf.contrib.layers.l2_regularizer(2.5e-5),
+                                                activation_fn=tf.identity)
+        conv2 = lrelu(conv2)
+        conv2 = tf.reshape(conv2, [-1, np.prod(conv2.get_shape().as_list()[1:])])
+        fc1 = tf.contrib.layers.fully_connected(conv2, 512,
+                                                weights_initializer=tf.contrib.layers.xavier_initializer(),
+                                                weights_regularizer=tf.contrib.layers.l2_regularizer(2.5e-5),
+                                                activation_fn=tf.identity)
+        fc1 = lrelu(fc1)
+        self.mean = tf.contrib.layers.fully_connected(fc1, conf.latent_dim,
+                                                      weights_initializer=tf.contrib.layers.xavier_initializer(),
+                                                      weights_regularizer=tf.contrib.layers.l2_regularizer(2.5e-5),
+                                                      activation_fn=tf.identity)
+        self.stddev = tf.contrib.layers.fully_connected(fc1, conf.latent_dim,
+                                                        weights_initializer=tf.contrib.layers.xavier_initializer(),
+                                                        weights_regularizer=tf.contrib.layers.l2_regularizer(2.5e-5),
+                                                        activation_fn=tf.sigmoid)
+        self.pred = self.mean + tf.mul(self.stddev,
+                                       tf.random_normal(tf.pack([tf.shape(X)[0], conf.latent_dim])))
+
+        if "elbo" in conf.model:
+            self.reg_loss = tf.reduce_mean(-tf.log(self.stddev) + 0.5 * tf.square(self.stddev) +
+                                           0.5 * tf.square(self.mean) - 0.5)
+        elif "2norm" in conf.model:
+            self.reg_loss = tf.reduce_mean(0.5 * tf.square(self.mean))
+        else:
+            self.reg_loss = 0

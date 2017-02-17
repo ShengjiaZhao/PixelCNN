@@ -32,6 +32,10 @@ def conv_op(x, W):
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
 
+def lrelu(x, rate=0.1):
+    # return tf.nn.relu(x)
+    return tf.maximum(tf.minimum(x * rate, 0), x)
+
 class GatedCNN():
     def __init__(self, W_shape, fan_in, gated=True, payload=None, mask=None, activation=True, conditional=None):
         self.fan_in = fan_in
