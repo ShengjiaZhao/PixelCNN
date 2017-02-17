@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 
+
+# Get weight tensor with shape and convolutional masks
 def get_weights(shape, name, mask=None):
     weights_initializer = tf.contrib.layers.xavier_initializer()
     W = tf.get_variable(name, shape, tf.float32, weights_initializer)
@@ -39,8 +41,8 @@ class GatedCNN():
 
         self.payload = payload
         self.mask = mask
-        self.activation = activation
-        self.conditional = conditional
+        self.activation = activation    # If simple_conv uses ReLU activation
+        self.conditional = conditional  # Additional latent information to condition on
         
         if gated:
             self.gated_conv()

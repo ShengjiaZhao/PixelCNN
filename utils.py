@@ -8,15 +8,15 @@ def binarize(images):
     return (np.random.uniform(size=images.shape) < images).astype(np.float32)
 
 def generate_samples(sess, X, h, pred, conf, suff):
-    print "Generating Sample Images..."
+    print("Generating Sample Images...")
     n_row, n_col = 10,10
     samples = np.zeros((n_row*n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     # TODO make it generic
     labels = one_hot(np.array([0,1,2,3,4,5,6,7,8,9]*10), conf.num_classes)
 
-    for i in xrange(conf.img_height):
-        for j in xrange(conf.img_width):
-            for k in xrange(conf.channel):
+    for i in range(conf.img_height):
+        for j in range(conf.img_width):
+            for k in range(conf.channel):
                 data_dict = {X:samples}
                 if conf.conditional is True:
                     data_dict[h] = labels
@@ -29,17 +29,17 @@ def generate_samples(sess, X, h, pred, conf, suff):
 
 
 def generate_ae(sess, encoder_X, decoder_X, y, data, conf, suff=''):
-    print "Generating Sample Images..."
-    n_row, n_col = 10,10
+    print("Generating Sample Images...")
+    n_row, n_col = 10, 10
     samples = np.zeros((n_row*n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     if conf.data == 'mnist':
         labels = binarize(data.train.next_batch(n_row*n_col)[0].reshape(n_row*n_col, conf.img_height, conf.img_width, conf.channel))
     else:
         labels = get_batch(data, 0, n_row*n_col) 
 
-    for i in xrange(conf.img_height):
-        for j in xrange(conf.img_width):
-            for k in xrange(conf.channel):
+    for i in range(conf.img_height):
+        for j in range(conf.img_width):
+            for k in range(conf.channel):
                 next_sample = sess.run(y, {encoder_X: labels, decoder_X: samples})
                 if conf.data == 'mnist':
                     next_sample = binarize(next_sample)
@@ -83,7 +83,7 @@ def makepaths(conf):
         os.makedirs(ckpt_full_path)
     conf.ckpt_file = os.path.join(ckpt_full_path, "model.ckpt")
 
-    conf.samples_path = os.path.join(conf.samples_path, "epoch=%d_bs=%d_layers=%d_fmap=%d"%(conf.epochs, conf.batch_size, conf.layers, conf.f_map))
+    conf.samples_path = os.path.join(conf.samples_path, "type=%s_epoch=%d_bs=%d_layers=%d_fmap=%d"%(conf.model, conf.epochs, conf.batch_size, conf.layers, conf.f_map))
     if not os.path.exists(conf.samples_path):
         os.makedirs(conf.samples_path)
 

@@ -9,7 +9,7 @@ def train(conf, data):
     X = tf.placeholder(tf.float32, shape=[None, conf.img_height, conf.img_width, conf.channel])
     model = PixelCNN(X, conf)
 
-    trainer = tf.train.RMSPropOptimizer(1e-3)
+    trainer = tf.train.RMSPropOptimizer(5e-4)
     gradients = trainer.compute_gradients(model.loss)
 
     clipped_gradients = [(tf.clip_by_value(_[0], -conf.grad_clip, conf.grad_clip), _[1]) for _ in gradients]
@@ -17,14 +17,16 @@ def train(conf, data):
 
     saver = tf.train.Saver(tf.trainable_variables())
 
-    with tf.Session() as sess: 
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
         sess.run(tf.initialize_all_variables())
         if os.path.exists(conf.ckpt_file):
             saver.restore(sess, conf.ckpt_file)
-            print "Model Restored"
-       
+            print("Model Restored")
+        else:
+            print("Model reinitialized")
         if conf.epochs > 0:
-            print "Started Model Training..."
+            print("Started Model Training...")
         pointer = 0
         for i in range(conf.epochs):
             for j in range(conf.num_batches):
@@ -39,19 +41,21 @@ def train(conf, data):
                 if conf.conditional is True:
                     data_dict[model.h] = batch_y
                 _, cost = sess.run([optimizer, model.loss], feed_dict=data_dict)
-            print "Epoch: %d, Cost: %f"%(i, cost)
-            if (i+1)%10 == 0:
+            print("Epoch: %d, Cost: %f"%(i, cost))
+            if (i+1)%2 == 0:
                 saver.save(sess, conf.ckpt_file)
                 generate_samples(sess, X, model.h, model.pred, conf, "")
 
         generate_samples(sess, X, model.h, model.pred, conf, "")
 
 if __name__ == "__main__":
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default='mnist')
     parser.add_argument('--layers', type=int, default=12)
     parser.add_argument('--f_map', type=int, default=32)
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--epochs', type=int, default=500)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--grad_clip', type=int, default=1)
     parser.add_argument('--model', type=str, default='')
@@ -79,12 +83,12 @@ if __name__ == "__main__":
         data[:,0,:,:] -= np.mean(data[:,0,:,:])
         data[:,1,:,:] -= np.mean(data[:,1,:,:])
         data[:,2,:,:] -= np.mean(data[:,2,:,:])
-        data = np.transpose(data, (0, 2, 3, 1))
+        # data = np.transpose(data, (0, 2, 3, 1))
         conf.img_height = 32
         conf.img_width = 32
         conf.channel = 3
         conf.num_classes = 10
-        conf.num_batches = data.shape[0] // conf.batch_size
+        conf.num_batches = data.shape[0] // conf.batch_size // 10
 
     conf = makepaths(conf) 
     if conf.model == '':
