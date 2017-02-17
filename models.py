@@ -94,8 +94,8 @@ class ConvolutionalEncoder(object):
         conv3 = tf.nn.relu(conv_op(pool2, W_conv3) + b_conv3)
         conv3_reshape = tf.reshape(conv3, (-1, 7*7*200))
 
-        W_fc = get_weights([7*7*200, 10], "W_fc")
-        b_fc = get_bias([10], "b_fc")
+        W_fc = get_weights([7*7*200, conf.latent_dim], "W_fc")
+        b_fc = get_bias([conf.latent_dim], "b_fc")
         self.pred = tf.nn.softmax(tf.add(tf.matmul(conv3_reshape, W_fc), b_fc))
 
 

@@ -49,7 +49,7 @@ def train(conf, data):
         generate_samples(sess, X, model.h, model.pred, conf, "")
 
 if __name__ == "__main__":
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default='mnist')
@@ -75,6 +75,8 @@ if __name__ == "__main__":
         conf.img_width = 28
         conf.channel = 1
         conf.num_batches = data.train.num_examples // conf.batch_size
+
+        conf.latent_dim = 10
     else:
         from keras.datasets import cifar10
         data = cifar10.load_data()
@@ -91,14 +93,15 @@ if __name__ == "__main__":
         conf.num_batches = data.shape[0] // conf.batch_size // 10
 
     conf = makepaths(conf) 
+
+    if 'conditional' in conf.model.lower():
+        conf.conditional = True
+        train(conf, data)
+    elif 'autoencoder' in conf.model.lower():
+        conf.conditional = True
+        trainAE(conf, data)
     if conf.model == '':
         conf.conditional = False
         train(conf, data)
-    elif conf.model.lower() == 'conditional':
-        conf.conditional = True
-        train(conf, data)
-    elif conf.model.lower() == 'autoencoder':
-        conf.conditional = True
-        trainAE(conf, data)
 
 
