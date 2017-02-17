@@ -1,5 +1,6 @@
 import tensorflow as tf
 from layers import *
+import math
 
 class PixelCNN(object):
     def __init__(self, X, conf, h=None):
@@ -98,10 +99,8 @@ class ConvolutionalEncoderOld(object):
         b_fc = get_bias([conf.latent_dim], "b_fc")
         self.pred = tf.nn.softmax(tf.add(tf.matmul(conv3_reshape, W_fc), b_fc))
 
-
-
 class ConvolutionalEncoder(object):
-    def __init__(self, X, conf):
+    def __init__(self, X, conf, z=None):
         '''
             This is the 6-layer architecture for Convolutional Autoencoder
             mentioned in the original paper:
@@ -142,6 +141,19 @@ class ConvolutionalEncoder(object):
             self.reg_loss = tf.reduce_mean(-tf.log(self.stddev) + 0.5 * tf.square(self.stddev) +
                                            0.5 * tf.square(self.mean) - 0.5)
         elif "2norm" in conf.model:
-            self.reg_loss = tf.reduce_mean(0.5 * tf.square(self.mean))
+            self.reg_loss = tf.reduce_mean(0.5 * tf.square(self.pred))
         else:
             self.reg_loss = 0
+
+        if z is not None:
+            mu = tf.reshape(self.mean, shape=tf.pack([tf.shape(X)[0], 1, conf.latent_dim]))
+            mu = tf.tile(mu, tf.pack([1, tf.shape(z)[0], 1]))
+            sig = tf.reshape(self.stddev, shape=tf.pack([tf.shape(X)[0], 1, conf.latent_dim]))
+            sig = tf.tile(sig, tf.pack([1, tf.shape(z)[0], 1]))
+            z = tf.reshape(z, shape=tf.pack([1, tf.shape(z)[0], conf.latent_dim]))
+            z = tf.tile(z, tf.pack([tf.shape(X)[0], 1, 1]))
+
+            coeff = tf.div(1.0 / math.sqrt(2 * math.pi), sig)
+            ll = coeff * tf.exp(-tf.div(tf.square(z - mu), 2 * tf.square(sig)))
+            ll = tf.reduce_prod(ll, axis=2)
+            self.prob = ll

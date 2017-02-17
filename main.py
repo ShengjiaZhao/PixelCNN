@@ -49,7 +49,7 @@ def train(conf, data):
         generate_samples(sess, X, model.h, model.pred, conf, "")
 
 if __name__ == "__main__":
-    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default='mnist')

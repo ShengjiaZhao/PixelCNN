@@ -50,7 +50,7 @@ def generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_ex
 def generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, suff=''):
     print("Generating Sample Images...")
     start_time = time.time()
-    n_row, n_col = 10, 10
+    n_row, n_col = 10, 20
     samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     # current = binarize(data.train.next_batch(n_row)[0].reshape(n_row, conf.img_height, conf.img_width, conf.channel))
     current = np.random.uniform(0.0, 1.0, size=(n_row, conf.img_height, conf.img_width, conf.channel)).astype(np.float32)
@@ -123,6 +123,7 @@ def makepaths(conf):
     if not os.path.exists(conf.samples_path):
         os.makedirs(conf.samples_path)
 
+    conf.summary_path = os.path.join(conf.summary_path, conf.model)
     if tf.gfile.Exists(conf.summary_path):
         tf.gfile.DeleteRecursively(conf.summary_path)
     tf.gfile.MakeDirs(conf.summary_path)
