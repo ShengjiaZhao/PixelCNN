@@ -52,10 +52,8 @@ def trainAE(conf, data):
             start_time = time.time()
             decoder_loss = 0.0
             for j in range(conf.num_batches):
-                if conf.data == 'mnist':
-                    batch_X = binarize(data.train.next_batch(conf.batch_size)[0].reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel))
-                else:
-                    batch_X, pointer = get_batch(data, pointer, conf.batch_size)
+                batch_X = data.train.next_batch(conf.batch_size)[0].reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
+                batch_X = hard_binarize(batch_X)
 
                 _, l, summary = sess.run([optimizer, decoder.loss, merged],
                                          feed_dict={encoder_X: batch_X, decoder_X: batch_X,
@@ -66,10 +64,10 @@ def trainAE(conf, data):
             decoder_loss /= conf.num_batches
             print("Epoch: %d, Cost: %f, epoch time %fs" % (i, decoder_loss, time.time() - start_time))
 
-            mutual_info = compute_mutual_information(data, conf, sess, encoder_X, encoder.pred, prob_z,
-                                                     encoder.prob)
-            mutual_info_writer.write("%d %f %f\n" % (i, mutual_info, decoder_loss))
-            mutual_info_writer.flush()
+            # mutual_info = compute_mutual_information(data, conf, sess, encoder_X, encoder.pred, prob_z,
+            #                                          encoder.prob)
+            # mutual_info_writer.write("%d %f %f\n" % (i, mutual_info, decoder_loss))
+            # mutual_info_writer.flush()
 
             if (i+1) % 10 == 0:
                 saver.save(sess, conf.ckpt_file)
@@ -92,7 +90,7 @@ def compute_mutual_information(data, conf, sess, encoder_X, z, prob_z, prob_val)
     for batch in range(num_batch):
         batch_X = binarize(
             data.train.next_batch(batch_size)[0].reshape(batch_size, conf.img_height, conf.img_width,
-                                                              conf.channel))
+                                                              conf.channel), conf)
         x_batches[batch*batch_size:(batch+1)*batch_size, :] = batch_X
         code = sess.run(z, feed_dict={encoder_X: batch_X})
         z_batches[batch*batch_size:(batch+1)*batch_size, :] = code

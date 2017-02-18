@@ -49,8 +49,8 @@ class PixelCNN(object):
         if conf.data == "mnist":
             with tf.variable_scope("fc_2"):
                 self.fc2 = GatedCNN([1, 1, 1], fc1, gated=False, mask='b', activation=False).output()
-            self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(self.fc2, self.X))
             self.pred = tf.nn.sigmoid(self.fc2)
+            self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(self.fc2, self.X))
         else:
             color_dim = 256
             with tf.variable_scope("fc_2"):
@@ -145,6 +145,9 @@ class ConvolutionalEncoder(object):
             self.reg_loss = tf.reduce_mean(0.5 * tf.square(self.pred))
         elif "center" in conf.model:
             self.reg_loss = tf.reduce_sum(-tf.log(self.stddev) + 0.5 * tf.square(self.mean))
+        elif "elbo0_1" in conf.model:
+            self.reg_loss = 0.1 * tf.reduce_mean(-tf.log(self.stddev) + 0.5 * tf.square(self.stddev) +
+                                           0.5 * tf.square(self.mean) - 0.5)
         else:
             self.reg_loss = 0.0 # Add something for stability
 

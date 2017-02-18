@@ -7,10 +7,14 @@ import tensorflow as tf
 def binarize(images):
     return (np.random.uniform(size=images.shape) < images).astype(np.float32)
 
+def hard_binarize(images):
+    return (0.5 * np.ones(shape=images.shape) < images).astype(np.float32)
+
 def generate_samples(sess, X, h, pred, conf, suff):
     print("Generating Sample Images...")
     n_row, n_col = 10,10
     samples = np.zeros((n_row*n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
+    smooth_samples = np.zeros((n_row * n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     # TODO make it generic
     labels = one_hot(np.array([0,1,2,3,4,5,6,7,8,9]*10), conf.num_classes)
 
@@ -21,11 +25,12 @@ def generate_samples(sess, X, h, pred, conf, suff):
                 if conf.conditional is True:
                     data_dict[h] = labels
                 next_sample = sess.run(pred, feed_dict=data_dict)
+                smooth_samples[:, i, j, k] = next_sample[:, i, j, k]
                 if conf.data == "mnist":
                     next_sample = binarize(next_sample)
                 samples[:, i, j, k] = next_sample[:, i, j, k]
-
-    save_images(samples, n_row, n_col, conf, suff)
+    smooth_samples = np.reshape(smooth_samples, [n_row, n_col, conf.img_height, conf.img_width, conf.channel])
+    save_images(smooth_samples, n_row, n_col, conf, suff)
 
 
 def generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_external_code, suff=''):
@@ -33,6 +38,7 @@ def generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_ex
     start_time = time.time()
     n_row, n_col = 10, 10
     samples = np.zeros((n_row*n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
+    smooth_samples = np.zeros((n_row * n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     latent = np.random.normal(size=(n_row*n_col, conf.latent_dim))
     dummy_input = np.zeros((n_row*n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     for i in range(conf.img_height):
@@ -40,18 +46,21 @@ def generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_ex
             for k in range(conf.channel):
                 next_sample = sess.run(y, {encoder_X: dummy_input, decoder_X: samples, use_external_code: True,
                                            external_code: latent})
+                smooth_samples[:, i, j, k] = next_sample[:, i, j, k]
                 if conf.data == 'mnist':
                     next_sample = binarize(next_sample)
                 samples[:, i, j, k] = next_sample[:, i, j, k]
-    samples = np.reshape(samples, [n_row, n_col, conf.img_height, conf.img_width, conf.channel])
-    save_images(samples, n_row, n_col, conf, suff)
+    smooth_samples = np.reshape(smooth_samples, [n_row, n_col, conf.img_height, conf.img_width, conf.channel])
+    save_images(smooth_samples, n_row, n_col, conf, suff)
     print("Finished, Elapsed time %fs" % (time.time() - start_time))
+
 
 def generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, suff=''):
     print("Generating Sample Images...")
     start_time = time.time()
     n_row, n_col = 10, 20
     samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
+    smooth_samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     # current = binarize(data.train.next_batch(n_row)[0].reshape(n_row, conf.img_height, conf.img_width, conf.channel))
     current = np.random.uniform(0.0, 1.0, size=(n_row, conf.img_height, conf.img_width, conf.channel)).astype(np.float32)
     history = [current]
@@ -61,21 +70,20 @@ def generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, 
                 for k in range(conf.channel):
                     next_sample = sess.run(y, {encoder_X: current, decoder_X: samples,
                                                external_code: np.zeros([n_row, conf.latent_dim])})
+                    smooth_samples[:, i, j, k] = next_sample[:, i, j, k]
                     if conf.data == 'mnist':
                         next_sample = binarize(next_sample)
                     samples[:, i, j, k] = next_sample[:, i, j, k]
-        history.append(samples)
+        history.append(smooth_samples)
         current = samples
         samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
+        smooth_samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     chain = np.stack(history, axis=1)
-    # print(chain.shape)
-    # chain = np.transpose(chain, (1, 0, 2, 3, 4))
-    # chain = chain.reshape(n_row, n_col, conf.img_height, conf.img_width)
     save_images(chain, n_row, n_col, conf, suff)
     print("Finished, Elapsed time %fs" % (time.time() - start_time))
 
-def save_images(samples, n_row, n_col, conf, suff):
 
+def save_images(samples, n_row, n_col, conf, suff):
     images = np.zeros((n_row * conf.img_height, n_col * conf.img_width))
     for i in range(n_row):
         for j in range(n_col):
@@ -86,19 +94,6 @@ def save_images(samples, n_row, n_col, conf, suff):
     filename = datetime.now().strftime('%Y_%m_%d_%H_%M')+'_'+suff+".jpg"
     scipy.misc.toimage(images, cmin=0.0, cmax=1.0).save(os.path.join(conf.samples_path, filename))
 
-def save_chain_images(chain, n_row, n_col, conf, suff):
-    images = chain[1]
-    if conf.data == "mnist":
-        images = images.reshape((n_row, n_col, conf.img_height, conf.img_width))
-        images = images.transpose(1, 2, 0, 3)
-        images = images.reshape((conf.img_height * n_row, conf.img_width * n_col))
-    else:
-        images = images.reshape((n_row, n_col, conf.img_height, conf.img_width, conf.channel))
-        images = images.transpose(1, 2, 0, 3, 4)
-        images = images.reshape((conf.img_height * n_row, conf.img_width * n_col, conf.channel))
-
-    filename = datetime.now().strftime('%Y_%m_%d_%H_%M')+'_'+suff+".jpg"
-    scipy.misc.toimage(images, cmin=0.0, cmax=1.0).save(os.path.join(conf.samples_path, filename))
 
 def get_batch(data, pointer, batch_size):
     if (batch_size + 1) * pointer >= data.shape[0]:
