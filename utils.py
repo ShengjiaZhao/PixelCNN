@@ -43,7 +43,7 @@ def generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_ex
                 if conf.data == 'mnist':
                     next_sample = binarize(next_sample)
                 samples[:, i, j, k] = next_sample[:, i, j, k]
-
+    samples = np.reshape(samples, [n_row, n_col, conf.img_height, conf.img_width, conf.channel])
     save_images(samples, n_row, n_col, conf, suff)
     print("Finished, Elapsed time %fs" % (time.time() - start_time))
 
@@ -67,21 +67,22 @@ def generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, 
         history.append(samples)
         current = samples
         samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
-    chain = np.concatenate(history, axis=0)
+    chain = np.stack(history, axis=1)
+    # print(chain.shape)
+    # chain = np.transpose(chain, (1, 0, 2, 3, 4))
+    # chain = chain.reshape(n_row, n_col, conf.img_height, conf.img_width)
     save_images(chain, n_row, n_col, conf, suff)
     print("Finished, Elapsed time %fs" % (time.time() - start_time))
 
 def save_images(samples, n_row, n_col, conf, suff):
-    images = samples 
-    if conf.data == "mnist":
-        images = images.reshape((n_row, n_col, conf.img_height, conf.img_width))
-        images = images.transpose(1, 2, 0, 3)
-        images = images.reshape((conf.img_height * n_row, conf.img_width * n_col))
-    else:
-        images = images.reshape((n_row, n_col, conf.img_height, conf.img_width, conf.channel))
-        images = images.transpose(1, 2, 0, 3, 4)
-        images = images.reshape((conf.img_height * n_row, conf.img_width * n_col, conf.channel))
 
+    images = np.zeros((n_row * conf.img_height, n_col * conf.img_width))
+    for i in range(n_row):
+        for j in range(n_col):
+            images[i*conf.img_height:(i+1)*conf.img_height, j*conf.img_width:(j+1)*conf.img_width] = samples[i, j, :, :, 0]
+        # images = images.reshape((n_row, n_col, conf.img_height, conf.img_width))
+        # images = images.transpose(1, 2, 0, 3)
+        # images = images.reshape((conf.img_height * n_row, conf.img_width * n_col))
     filename = datetime.now().strftime('%Y_%m_%d_%H_%M')+'_'+suff+".jpg"
     scipy.misc.toimage(images, cmin=0.0, cmax=1.0).save(os.path.join(conf.samples_path, filename))
 

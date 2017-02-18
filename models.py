@@ -134,6 +134,7 @@ class ConvolutionalEncoder(object):
                                                         weights_initializer=tf.contrib.layers.xavier_initializer(),
                                                         weights_regularizer=tf.contrib.layers.l2_regularizer(2.5e-5),
                                                         activation_fn=tf.sigmoid)
+        self.stddev = tf.maximum(self.stddev, 0.001)
         self.pred = self.mean + tf.mul(self.stddev,
                                        tf.random_normal(tf.pack([tf.shape(X)[0], conf.latent_dim])))
 
@@ -142,8 +143,10 @@ class ConvolutionalEncoder(object):
                                            0.5 * tf.square(self.mean) - 0.5)
         elif "2norm" in conf.model:
             self.reg_loss = tf.reduce_mean(0.5 * tf.square(self.pred))
+        elif "center" in conf.model:
+            self.reg_loss = tf.reduce_sum(-tf.log(self.stddev) + 0.5 * tf.square(self.mean))
         else:
-            self.reg_loss = 0
+            self.reg_loss = 0.0 # Add something for stability
 
         if z is not None:
             mu = tf.reshape(self.mean, shape=tf.pack([tf.shape(X)[0], 1, conf.latent_dim]))

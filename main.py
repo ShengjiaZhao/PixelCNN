@@ -55,7 +55,7 @@ if __name__ == "__main__":
     parser.add_argument('--data', type=str, default='mnist')
     parser.add_argument('--layers', type=int, default=12)
     parser.add_argument('--f_map', type=int, default=32)
-    parser.add_argument('--epochs', type=int, default=500)
+    parser.add_argument('--epochs', type=int, default=5000)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--grad_clip', type=int, default=1)
     parser.add_argument('--model', type=str, default='')
@@ -74,7 +74,7 @@ if __name__ == "__main__":
         conf.img_height = 28
         conf.img_width = 28
         conf.channel = 1
-        conf.num_batches = data.train.num_examples // conf.batch_size
+        conf.num_batches = 30
 
         conf.latent_dim = 10
     else:
@@ -90,7 +90,7 @@ if __name__ == "__main__":
         conf.img_width = 32
         conf.channel = 3
         conf.num_classes = 10
-        conf.num_batches = data.shape[0] // conf.batch_size // 10
+        conf.num_batches = data.shape[0] // conf.batch_size // 50
 
     conf = makepaths(conf) 
 
