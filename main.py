@@ -5,11 +5,12 @@ from models import PixelCNN
 from autoencoder import *
 from utils import *
 
+
 def train(conf, data):
     X = tf.placeholder(tf.float32, shape=[None, conf.img_height, conf.img_width, conf.channel])
     model = PixelCNN(X, conf)
 
-    trainer = tf.train.RMSPropOptimizer(5e-4)
+    trainer = tf.train.RMSPropOptimizer(1e-3)
     gradients = trainer.compute_gradients(model.loss)
 
     clipped_gradients = [(tf.clip_by_value(_[0], -conf.grad_clip, conf.grad_clip), _[1]) for _ in gradients]
@@ -20,7 +21,7 @@ def train(conf, data):
     gpu_options = tf.GPUOptions(allow_growth=True)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
         sess.run(tf.initialize_all_variables())
-        if os.path.exists(conf.ckpt_file):
+        if len(glob.glob(conf.ckpt_file + '*')) != 0:
             saver.restore(sess, conf.ckpt_file)
             print("Model Restored")
         else:
@@ -29,11 +30,11 @@ def train(conf, data):
             print("Started Model Training...")
         pointer = 0
         for i in range(conf.epochs):
+            start_time = time.time()
             for j in range(conf.num_batches):
                 if conf.data == "mnist":
                     batch_X, batch_y = data.train.next_batch(conf.batch_size)
-                    batch_X = binarize(batch_X.reshape([conf.batch_size, \
-                            conf.img_height, conf.img_width, conf.channel]))
+                    batch_X = binarize(batch_X.reshape([conf.batch_size, conf.img_height, conf.img_width, conf.channel]))
                     batch_y = one_hot(batch_y, conf.num_classes) 
                 else:
                     batch_X, pointer = get_batch(data, pointer, conf.batch_size)
@@ -41,21 +42,22 @@ def train(conf, data):
                 if conf.conditional is True:
                     data_dict[model.h] = batch_y
                 _, cost = sess.run([optimizer, model.loss], feed_dict=data_dict)
-            print("Epoch: %d, Cost: %f"%(i, cost))
+            print("Epoch: %d, Cost: %f, step time %fs" % (i, cost, time.time() - start_time))
             if (i+1)%2 == 0:
                 saver.save(sess, conf.ckpt_file)
                 generate_samples(sess, X, model.h, model.pred, conf, "")
 
         generate_samples(sess, X, model.h, model.pred, conf, "")
 
+# python main.py --model=autoencoder
 if __name__ == "__main__":
-    os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default='mnist')
     parser.add_argument('--layers', type=int, default=12)
     parser.add_argument('--f_map', type=int, default=32)
-    parser.add_argument('--epochs', type=int, default=5000)
+    parser.add_argument('--epochs', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--grad_clip', type=int, default=1)
     parser.add_argument('--model', type=str, default='')
@@ -74,23 +76,24 @@ if __name__ == "__main__":
         conf.img_height = 28
         conf.img_width = 28
         conf.channel = 1
-        conf.num_batches = 30
+        conf.num_batches = 10
 
         conf.latent_dim = 10
     else:
         from keras.datasets import cifar10
         data = cifar10.load_data()
         labels = data[0][1]
-        data = data[0][0].astype(np.float32)
-        data[:,0,:,:] -= np.mean(data[:,0,:,:])
-        data[:,1,:,:] -= np.mean(data[:,1,:,:])
-        data[:,2,:,:] -= np.mean(data[:,2,:,:])
+        data = data[0][0].astype(np.int32)
+        # data[:,0,:,:] -= np.mean(data[:,0,:,:])
+        # data[:,1,:,:] -= np.mean(data[:,1,:,:])
+        # data[:,2,:,:] -= np.mean(data[:,2,:,:])
+
         # data = np.transpose(data, (0, 2, 3, 1))
         conf.img_height = 32
         conf.img_width = 32
         conf.channel = 3
         conf.num_classes = 10
-        conf.num_batches = data.shape[0] // conf.batch_size // 50
+        conf.num_batches = 200
 
     conf = makepaths(conf) 
 
@@ -100,7 +103,7 @@ if __name__ == "__main__":
     elif 'autoencoder' in conf.model.lower():
         conf.conditional = True
         trainAE(conf, data)
-    if conf.model == '':
+    else:
         conf.conditional = False
         train(conf, data)
 

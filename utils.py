@@ -3,6 +3,7 @@ import os, time
 import scipy.misc
 from datetime import datetime
 import tensorflow as tf
+import subprocess
 
 def binarize(images):
     return (np.random.uniform(size=images.shape) < images).astype(np.float32)
@@ -12,6 +13,7 @@ def hard_binarize(images):
 
 def generate_samples(sess, X, h, pred, conf, suff):
     print("Generating Sample Images...")
+    start_time = time.time()
     n_row, n_col = 10,10
     samples = np.zeros((n_row*n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     smooth_samples = np.zeros((n_row * n_col, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
@@ -20,18 +22,17 @@ def generate_samples(sess, X, h, pred, conf, suff):
 
     for i in range(conf.img_height):
         for j in range(conf.img_width):
-            for k in range(conf.channel):
-                data_dict = {X:samples}
-                if conf.conditional is True:
-                    data_dict[h] = labels
-                next_sample = sess.run(pred, feed_dict=data_dict)
-                smooth_samples[:, i, j, k] = next_sample[:, i, j, k]
-                if conf.data == "mnist":
-                    next_sample = binarize(next_sample)
-                samples[:, i, j, k] = next_sample[:, i, j, k]
+            data_dict = {X:samples}
+            if conf.conditional is True:
+                data_dict[h] = labels
+            next_sample = sess.run(pred, feed_dict=data_dict)
+            smooth_samples[:, i, j, :] = next_sample[:, i, j, :]
+            if conf.data == "mnist":
+                next_sample = binarize(next_sample)
+            samples[:, i, j, :] = next_sample[:, i, j, :]
     smooth_samples = np.reshape(smooth_samples, [n_row, n_col, conf.img_height, conf.img_width, conf.channel])
     save_images(smooth_samples, n_row, n_col, conf, suff)
-
+    print("Finished, Elapsed time %fs" % (time.time() - start_time))
 
 def generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_external_code, suff=''):
     print("Generating Sample Images...")
@@ -53,16 +54,17 @@ def generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_ex
     smooth_samples = np.reshape(smooth_samples, [n_row, n_col, conf.img_height, conf.img_width, conf.channel])
     save_images(smooth_samples, n_row, n_col, conf, suff)
     print("Finished, Elapsed time %fs" % (time.time() - start_time))
+    return smooth_samples
 
 
 def generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, suff=''):
     print("Generating Sample Images...")
     start_time = time.time()
-    n_row, n_col = 10, 20
+    n_row, n_col = 100, 20
     samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     smooth_samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     # current = binarize(data.train.next_batch(n_row)[0].reshape(n_row, conf.img_height, conf.img_width, conf.channel))
-    current = np.random.uniform(0.0, 1.0, size=(n_row, conf.img_height, conf.img_width, conf.channel)).astype(np.float32)
+    current = hard_binarize(np.random.uniform(0.0, 1.0, size=(n_row, conf.img_height, conf.img_width, conf.channel)).astype(np.float32))
     history = [current]
     for iter in range(n_col - 1):
         for i in range(conf.img_height):
@@ -79,7 +81,8 @@ def generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, 
         samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
         smooth_samples = np.zeros((n_row, conf.img_height, conf.img_width, conf.channel), dtype=np.float32)
     chain = np.stack(history, axis=1)
-    save_images(chain, n_row, n_col, conf, suff)
+    chain = np.reshape(chain, (n_row*4, n_col//4, conf.img_height, conf.img_width, conf.channel))
+    save_images(chain, n_row*4, n_col//4, conf, suff)
     print("Finished, Elapsed time %fs" % (time.time() - start_time))
 
 
@@ -98,7 +101,7 @@ def save_images(samples, n_row, n_col, conf, suff):
 def get_batch(data, pointer, batch_size):
     if (batch_size + 1) * pointer >= data.shape[0]:
         pointer = 0
-    batch = data[batch_size * pointer : batch_size * (pointer + 1)]
+    batch = data[batch_size * pointer: batch_size * (pointer + 1)]
     pointer += 1
     return [batch, pointer]
 
@@ -110,14 +113,17 @@ def one_hot(batch_y, num_classes):
 
 
 def makepaths(conf):
+
     ckpt_full_path = os.path.join(conf.ckpt_path, "type=%s_data=%s_bs=%d_layers=%d_fmap=%d"%(conf.model, conf.data, conf.batch_size, conf.layers, conf.f_map))
-    if not os.path.exists(ckpt_full_path):
-        os.makedirs(ckpt_full_path)
+    if os.path.isdir(ckpt_full_path):
+        subprocess.call(('rm -rf %s' % ckpt_full_path).split())
+    os.makedirs(ckpt_full_path)
     conf.ckpt_file = os.path.join(ckpt_full_path, "model.ckpt")
 
-    conf.samples_path = os.path.join(conf.samples_path, "type=%s_epoch=%d_bs=%d_layers=%d_fmap=%d"%(conf.model, conf.epochs, conf.batch_size, conf.layers, conf.f_map))
-    if not os.path.exists(conf.samples_path):
-        os.makedirs(conf.samples_path)
+    conf.samples_path = os.path.join(conf.samples_path, "type=%s_%s_bs=%d_layers=%d_fmap=%d"%(conf.model, conf.data, conf.batch_size, conf.layers, conf.f_map))
+    if os.path.isdir(conf.samples_path):
+        subprocess.call(('rm -rf %s' % conf.samples_path).split())
+    os.makedirs(conf.samples_path)
 
     conf.summary_path = os.path.join(conf.summary_path, conf.model)
     if tf.gfile.Exists(conf.summary_path):
