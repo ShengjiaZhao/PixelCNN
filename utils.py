@@ -115,9 +115,8 @@ def one_hot(batch_y, num_classes):
 def makepaths(conf):
 
     ckpt_full_path = os.path.join(conf.ckpt_path, "type=%s_data=%s_bs=%d_layers=%d_fmap=%d"%(conf.model, conf.data, conf.batch_size, conf.layers, conf.f_map))
-    if os.path.isdir(ckpt_full_path):
-        subprocess.call(('rm -rf %s' % ckpt_full_path).split())
-    os.makedirs(ckpt_full_path)
+    if not os.path.isdir(ckpt_full_path):
+        os.makedirs(ckpt_full_path)
     conf.ckpt_file = os.path.join(ckpt_full_path, "model.ckpt")
 
     conf.samples_path = os.path.join(conf.samples_path, "type=%s_%s_bs=%d_layers=%d_fmap=%d"%(conf.model, conf.data, conf.batch_size, conf.layers, conf.f_map))

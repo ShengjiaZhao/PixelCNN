@@ -51,7 +51,7 @@ def train(conf, data):
 
 # python main.py --model=autoencoder
 if __name__ == "__main__":
-    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default='mnist')
@@ -65,6 +65,7 @@ if __name__ == "__main__":
     parser.add_argument('--ckpt_path', type=str, default='ckpts')
     parser.add_argument('--samples_path', type=str, default='samples')
     parser.add_argument('--summary_path', type=str, default='logs')
+    parser.add_argument('--latent_dim', type=int, default=10)
     conf = parser.parse_args()
   
     if conf.data == 'mnist':
@@ -77,8 +78,6 @@ if __name__ == "__main__":
         conf.img_width = 28
         conf.channel = 1
         conf.num_batches = 10
-
-        conf.latent_dim = 10
     else:
         from keras.datasets import cifar10
         data = cifar10.load_data()

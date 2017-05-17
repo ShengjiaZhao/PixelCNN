@@ -136,7 +136,7 @@ class ConvolutionalEncoder(object):
             self.d_loss = self.d_loss_x + self.d_loss_e + self.d_grad_loss
 
             self.d_vars = [var for var in tf.global_variables() if 'd_net' in var.name]
-            self.d_train = tf.train.AdamOptimizer(learning_rate=0.00005, beta1=0.5, beta2=0.9).minimize(self.d_loss,
+            self.d_train = tf.train.AdamOptimizer(learning_rate=0.00002, beta1=0.5, beta2=0.9).minimize(self.d_loss,
                                                                                                        var_list=self.d_vars)
             tf.summary.scalar('d_loss_x', self.d_loss_x)
             tf.summary.scalar('d_loss_e', self.d_loss_e)

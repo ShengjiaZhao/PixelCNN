@@ -5,6 +5,7 @@ from models import *
 import glob
 from matplotlib import pyplot as plt
 from mnist_classifier import *
+from sklearn import svm
 
 def trainAE(conf, data):
     if 'stein' in conf.model:
@@ -47,6 +48,8 @@ def trainAE(conf, data):
 
         covdet_ph = tf.placeholder(dtype=tf.float32, shape=[])
         covdet_summary = tf.summary.scalar('logdet', covdet_ph)
+        covdiag_ph = tf.placeholder(dtype=tf.float32, shape=[])
+        covdiag_summary = tf.summary.scalar('covdiag', covdiag_ph)
         mmd_ph = tf.placeholder(dtype=tf.float32, shape=[])
         mmd_summary = tf.summary.scalar('mmd', mmd_ph)
         ce_score_ph = tf.placeholder(dtype=tf.float32, shape=[])
@@ -61,25 +64,34 @@ def trainAE(conf, data):
         nll_summary = tf.summary.scalar('nll', nll_ph)
         mi_ph = tf.placeholder(dtype=tf.float32, shape=[])
         mi_summary = tf.summary.scalar('mi', mi_ph)
+        semi_1000_ph = tf.placeholder(dtype=tf.float32, shape=[])
+        semi_1000_summary = tf.summary.scalar('semi', semi_1000_ph)
+        semi_100_ph = tf.placeholder(dtype=tf.float32, shape=[])
+        semi_100_summary = tf.summary.scalar('semi', semi_100_ph)
 
         writer = tf.summary.FileWriter(conf.summary_path, sess.graph)
 
         sess.run(tf.initialize_all_variables())
         if len(glob.glob(conf.ckpt_file + '*')) != 0:
-            saver.restore(sess, conf.ckpt_file)
-            print("Model Restored")
+            try:
+                saver.restore(sess, conf.ckpt_file)
+                print("Model Restored")
+            except:
+                sess.run(tf.initialize_all_variables())
+                print("Model failed to load")
         else:
             print("Model reinitialized")
 
         step = 0
         for i in range(conf.epochs):
             if i % 20 == 0:
-                covdet = compute_covariance(conf, data, sess, encoder)
+                covdet, covdiag = compute_covariance(conf, data, sess, encoder)
                 mmd = compute_mmd(conf, data, sess, encoder)
 
                 writer.add_summary(sess.run(covdet_summary, feed_dict={covdet_ph: covdet}), step)
+                writer.add_summary(sess.run(covdiag_summary, feed_dict={covdiag_ph: covdiag}), step)
                 writer.add_summary(sess.run(mmd_summary, feed_dict={mmd_ph: mmd}), step)
-                print("Log of covariance is %f, MMD is %f" % (covdet, mmd))
+                print("Log of covariance is %f - %f, MMD is %f" % (covdet, covdiag, mmd))
 
                 mutual_info = compute_mutual_information(data, conf, sess, encoder, compute_ll)
                 writer.add_summary(sess.run(mi_summary, feed_dict={mi_ph: mutual_info}), step)
@@ -109,9 +121,41 @@ def trainAE(conf, data):
                 print("Likelihood elbo=%f, decoder nll=%f, total=%f" % (elbo, nll, elbo+nll))
 
             if i % 100 == 0:
+                print("Computing semi-supervised performance")
+                train_features = []
+                train_labels = []
+                for j in range(10):
+                    batch_X, train_label = data.train.next_batch(100)
+                    batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
+                    batch_X = hard_binarize(batch_X)
+                    train_feature = sess.run(encoder.pred, feed_dict={encoder_X: batch_X})
+                    train_features.append(train_feature)
+                    train_labels.append(train_label)
+                train_feature = np.concatenate(train_features, axis=0)
+                train_label = np.concatenate(train_labels, axis=0)
+
+                test_features = []
+                test_labels = []
+                for j in range(100):
+                    batch_X, test_label = data.test.next_batch(conf.batch_size)
+                    batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
+                    batch_X = hard_binarize(batch_X)
+                    test_features.append(sess.run(encoder.pred, feed_dict={encoder_X: batch_X}))
+                    test_labels.append(test_label)
+                test_feature = np.concatenate(test_features, axis=0)
+                test_label = np.concatenate(test_labels)
+                accuracy, gamma = semi_supervised_learning(train_feature, train_label, test_feature, test_label)
+                print("Semi-supervised 1000 performance is %f @ gamma=%f" % (accuracy, gamma))
+                writer.add_summary(sess.run(semi_1000_summary, feed_dict={semi_1000_ph: accuracy}), step)
+
+                accuracy, gamma = semi_supervised_learning(train_feature[:100, :], train_label[:100], test_feature, test_label)
+                print("Semi-supervised 100 performance is %f @ gamma=%f" % (accuracy, gamma))
+                writer.add_summary(sess.run(semi_100_summary, feed_dict={semi_100_ph: accuracy}), step)
+
+            if i % 100 == 0:
                 latents = []
                 labels = []
-                for j in range(5):
+                for j in range(10):
                     batch_X, batch_y = data.test.next_batch(conf.batch_size)
                     batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
                     batch_X = hard_binarize(batch_X)
@@ -129,7 +173,7 @@ def trainAE(conf, data):
                 for ind in range(latent.shape[0]):
                     point_writer.write("%d " % label[ind])
                     for coord in range(latent.shape[1]):
-                        point_writer.write("%d " % latent[ind, coord])
+                        point_writer.write("%f " % latent[ind, coord])
                     point_writer.write("\n")
                 point_writer.close()
             decoder_loss = 0.0
@@ -160,6 +204,28 @@ def trainAE(conf, data):
         generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, suff='c')
         generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_external_code, suff="")
 
+
+def semi_supervised_learning(train_feature, train_label, test_feature, test_label):
+    # Compute pair-wise distance
+    x_range = np.sqrt(np.sum(np.square(np.max(train_feature, axis=0) - np.min(train_feature, axis=0))))
+    gamma = 0.0001 / x_range
+    optimal_gamma = gamma
+    optimal_accuracy = 0
+    while True:
+        classifier = svm.SVC(decision_function_shape='ovr', gamma=gamma)
+        classifier.fit(train_feature, train_label)
+
+        pred = classifier.predict(test_feature)
+        correct_count = np.sum([1 for j in range(test_feature.shape[0]) if test_label[j] == pred[j]])
+        if correct_count > optimal_accuracy:
+            optimal_accuracy = correct_count
+            optimal_gamma = gamma
+        print("%f %d" % (gamma, correct_count))
+        gamma *= 2.0
+        if gamma > 100.0:
+            break
+    optimal_accuracy /= test_feature.shape[0]
+    return optimal_accuracy, optimal_gamma
 
 
 def compute_kernel(x, y, sigma_sqr=1.0):
@@ -218,7 +284,7 @@ def compute_covariance(conf, data, sess, encoder):
     mu = np.mean(latent, axis=0)
     latent = latent - np.tile(np.reshape(mu, [1, mu.shape[0]]), [latent.shape[0], 1])
     cov = np.dot(np.transpose(latent), latent) / (latent.shape[0] - 1)
-    return np.linalg.slogdet(cov)[1]
+    return np.linalg.slogdet(cov)[1],  np.sum(np.log(np.diag(cov)))
 
 
 def compute_mutual_information(data, conf, sess, inference, ll_compute):
