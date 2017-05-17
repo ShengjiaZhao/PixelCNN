@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import tensorflow as tf
 import numpy as np
 import argparse
@@ -49,7 +51,7 @@ def train(conf, data):
 
         generate_samples(sess, X, model.h, model.pred, conf, "")
 
-# python main.py --model=autoencoder
+# python main.py --data=mnist --model=autoencoder_noreg_20 --latent_dim=20
 if __name__ == "__main__":
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
