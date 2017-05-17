@@ -72,8 +72,8 @@ def mlp_discriminator(x, reuse=False):
         if reuse:
             vs.reuse_variables()
         x = tf.reshape(x, [-1, np.prod(x.get_shape().as_list()[1:])])
-        fc1 = fc_lrelu(x, 256)
-        fc2 = fc_lrelu(fc1, 256)
+        fc1 = fc_lrelu(x, 512)
+        fc2 = fc_lrelu(fc1, 512)
         fc3 = tf.contrib.layers.fully_connected(fc2, 1, activation_fn=tf.identity)
         return fc3
 
@@ -136,7 +136,7 @@ class ConvolutionalEncoder(object):
             self.d_loss = self.d_loss_x + self.d_loss_e + self.d_grad_loss
 
             self.d_vars = [var for var in tf.global_variables() if 'd_net' in var.name]
-            self.d_train = tf.train.AdamOptimizer(learning_rate=0.0002, beta1=0.5, beta2=0.9).minimize(self.d_loss,
+            self.d_train = tf.train.AdamOptimizer(learning_rate=0.00005, beta1=0.5, beta2=0.9).minimize(self.d_loss,
                                                                                                        var_list=self.d_vars)
             tf.summary.scalar('d_loss_x', self.d_loss_x)
             tf.summary.scalar('d_loss_e', self.d_loss_e)

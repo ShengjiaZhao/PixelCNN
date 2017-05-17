@@ -107,6 +107,31 @@ def trainAE(conf, data):
                 writer.add_summary(sess.run(elbo_summary, feed_dict={elbo_ph: elbo}), step)
                 writer.add_summary(sess.run(nll_summary, feed_dict={nll_ph: nll}), step)
                 print("Likelihood elbo=%f, decoder nll=%f, total=%f" % (elbo, nll, elbo+nll))
+
+            if i % 100 == 0:
+                latents = []
+                labels = []
+                for j in range(5):
+                    batch_X, batch_y = data.test.next_batch(conf.batch_size)
+                    batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
+                    batch_X = hard_binarize(batch_X)
+                    latent = sess.run(encoder.pred, feed_dict={encoder_X: batch_X})
+                    latents.append(latent)
+                    labels.append(batch_y)
+                latent = np.concatenate(latents, axis=0)
+                label = np.concatenate(labels)
+                ax.cla()
+                ax.scatter(latent[:, 0], latent[:, 1], c=label)
+                plt.draw()
+                plt.pause(0.001)
+                # Write the points to a file
+                point_writer = open(os.path.join(conf.samples_path, 'latents%d.txt' % step), 'w')
+                for ind in range(latent.shape[0]):
+                    point_writer.write("%d " % label[ind])
+                    for coord in range(latent.shape[1]):
+                        point_writer.write("%d " % latent[ind, coord])
+                    point_writer.write("\n")
+                point_writer.close()
             decoder_loss = 0.0
             start_time = time.time()
             for j in range(conf.num_batches):
@@ -124,12 +149,6 @@ def trainAE(conf, data):
                     _, l, summary, latent = sess.run([optimizer, decoder.loss, merged, encoder.pred],
                                              feed_dict={encoder_X: batch_X, decoder_X: batch_X,
                                                         external_code: np.zeros([conf.batch_size, conf.latent_dim])})
-                if j == 0:
-                    ax.cla()
-                    ax.scatter(latent[:, 0], latent[:, 1], c=batch_y)
-                    plt.draw()
-                    plt.pause(0.001)
-
                 decoder_loss += l
                 writer.add_summary(summary, step)
                 step += 1
