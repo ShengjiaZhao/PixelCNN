@@ -53,7 +53,7 @@ def train(conf, data):
 
 # python main.py --data=mnist --model=autoencoder_noreg_20 --latent_dim=20
 if __name__ == "__main__":
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default='mnist')
@@ -68,8 +68,11 @@ if __name__ == "__main__":
     parser.add_argument('--samples_path', type=str, default='samples')
     parser.add_argument('--summary_path', type=str, default='logs')
     parser.add_argument('--latent_dim', type=int, default=10)
+    parser.add_argument('--gpu', type=int, default=0)
     conf = parser.parse_args()
-  
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = '%d' % conf.gpu
+
     if conf.data == 'mnist':
         from tensorflow.examples.tutorials.mnist import input_data
         if not os.path.exists(conf.data_path):
