@@ -2,8 +2,6 @@ import tensorflow as tf
 import numpy as np
 import math
 import glob
-from matplotlib import pyplot as plt
-from matplotlib.patches import Ellipse
 from tensorflow.examples.tutorials.mnist import input_data
 import os, sys, shutil, re
 

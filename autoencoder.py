@@ -3,7 +3,6 @@ import numpy as np
 from utils import *
 from models import *
 import glob
-from matplotlib import pyplot as plt
 from mnist_classifier import *
 from sklearn import svm
 
@@ -42,7 +41,7 @@ def trainAE(conf, data):
 
     classifier = Classifier()
 
-    fig, ax = plt.subplots()
+    # fig, ax = plt.subplots()
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
         merged = tf.summary.merge_all()
 
@@ -164,10 +163,10 @@ def trainAE(conf, data):
                     labels.append(batch_y)
                 latent = np.concatenate(latents, axis=0)
                 label = np.concatenate(labels)
-                ax.cla()
-                ax.scatter(latent[:, 0], latent[:, 1], c=label)
-                plt.draw()
-                plt.pause(0.001)
+                # ax.cla()
+                # ax.scatter(latent[:, 0], latent[:, 1], c=label)
+                # plt.draw()
+                # plt.pause(0.001)
                 # Write the points to a file
                 point_writer = open(os.path.join(conf.samples_path, 'latents%d.txt' % step), 'w')
                 for ind in range(latent.shape[0]):
