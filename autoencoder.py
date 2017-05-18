@@ -94,7 +94,7 @@ def trainAE(conf, data):
 
                 mutual_info = compute_mutual_information(data, conf, sess, encoder, compute_ll)
                 writer.add_summary(sess.run(mi_summary, feed_dict={mi_ph: mutual_info}), step)
-            if (i+1) % 100 == 0:
+            if i % 100 == 0:
                 c_samples = []
                 for j in range(5):
                     c_samples.append(generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_external_code, suff=str(i)))
