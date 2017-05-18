@@ -62,8 +62,8 @@ class Classifier:
             label = np.argmax(label, 1)
             labels.append(label)
         label = np.concatenate(labels)
-        count = np.bincount(label) / label.size
-        ce_score = np.sum(-np.log(count) / count.size) - math.log(count.size)
+        count = np.bincount(label) / float(label.size)
+        ce_score = np.sum(-np.log(count) / float(count.size)) - math.log(count.size)
         norm1_score = np.sum(np.abs(count - 0.1))
         norm2_score = np.sqrt(np.sum(np.square(count - 0.1)))
         print(count, ce_score, norm1_score, norm2_score)

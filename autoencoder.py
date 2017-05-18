@@ -54,9 +54,9 @@ def trainAE(conf, data):
         ce_score_ph = tf.placeholder(dtype=tf.float32, shape=[])
         ce_summary = tf.summary.scalar('ce_score', ce_score_ph)
         norm1_score_ph = tf.placeholder(dtype=tf.float32, shape=[])
-        norm1_summary = tf.summary.scalar('ce_score', norm1_score_ph)
+        norm1_summary = tf.summary.scalar('norm1_score', norm1_score_ph)
         norm2_score_ph = tf.placeholder(dtype=tf.float32, shape=[])
-        norm2_summary = tf.summary.scalar('ce_score', norm2_score_ph)
+        norm2_summary = tf.summary.scalar('norm2_score', norm2_score_ph)
         elbo_ph = tf.placeholder(dtype=tf.float32, shape=[])
         elbo_summary = tf.summary.scalar('elbo', elbo_ph)
         nll_ph = tf.placeholder(dtype=tf.float32, shape=[])
@@ -223,7 +223,7 @@ def semi_supervised_learning(train_feature, train_label, test_feature, test_labe
         gamma *= 2.0
         if gamma > 100.0:
             break
-    optimal_accuracy /= test_feature.shape[0]
+    optimal_accuracy /= float(test_feature.shape[0])
     return optimal_accuracy, optimal_gamma
 
 
