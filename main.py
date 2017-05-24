@@ -19,7 +19,7 @@ def train(conf, data):
     saver = tf.train.Saver(tf.trainable_variables())
 
     gpu_options = tf.GPUOptions(allow_growth=True)
-    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         sess.run(tf.initialize_all_variables())
         if len(glob.glob(conf.ckpt_file + '*')) != 0:
             saver.restore(sess, conf.ckpt_file)
@@ -51,8 +51,6 @@ def train(conf, data):
 
 # python main.py --data=mnist --model=autoencoder_noreg_20 --latent_dim=20
 if __name__ == "__main__":
-
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=str, default='mnist')
     parser.add_argument('--layers', type=int, default=12)
