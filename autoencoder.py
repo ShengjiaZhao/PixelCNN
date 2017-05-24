@@ -6,6 +6,11 @@ import glob
 from mnist_classifier import *
 from sklearn import svm
 
+
+def compute_log_sum(val):
+    min_val = np.min(val, axis=0, keepdims=True)
+    return np.mean(min_val - np.log(np.mean(np.exp(-val + min_val), axis=0)))
+
 def trainAE(conf, data):
     if 'stein' in conf.model:
         encoder_X = tf.placeholder(tf.float32, shape=[conf.batch_size, conf.img_height, conf.img_width, conf.channel])
@@ -40,6 +45,7 @@ def trainAE(conf, data):
     gpu_options = tf.GPUOptions(allow_growth=True)
 
     classifier = Classifier()
+    file_writer = open(os.path.join(conf.summary_path, 'results.txt'), 'w')
 
     # fig, ax = plt.subplots()
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
@@ -67,6 +73,8 @@ def trainAE(conf, data):
         semi_1000_summary = tf.summary.scalar('semi', semi_1000_ph)
         semi_100_ph = tf.placeholder(dtype=tf.float32, shape=[])
         semi_100_summary = tf.summary.scalar('semi', semi_100_ph)
+        inll_ph = tf.placeholder(dtype=tf.float32, shape=[])
+        inll_summary = tf.summary.scalar('inll', inll_ph)
 
         writer = tf.summary.FileWriter(conf.summary_path, sess.graph)
 
@@ -83,47 +91,96 @@ def trainAE(conf, data):
 
         step = 0
         for i in range(conf.epochs):
-            if i % 20 == 0:
+            # Compute true log likelihoods by importance sampling
+            if (i+1) % 10000 == 0:
+                # Compute log likelihoods
+                if conf.estimate_nll:
+                    print("---------------------> Computing true log likelihood")
+                    start_time = time.time()
+                    avg_nll = []
+                    for _ in range(10):
+                        batch_X, batch_y = data.test.next_batch(conf.batch_size)
+                        batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
+                        batch_X = hard_binarize(batch_X)
+                        nll_list = []
+                        for iter in range(50000):
+                            random_latent = np.random.normal(size=[conf.batch_size, conf.latent_dim])
+                            nll = sess.run(decoder.sample_nll, feed_dict={decoder_X: batch_X, encoder_X: batch_X, use_external_code: True,
+                                                                          external_code: random_latent})
+                            nll_list.append(nll)
+                            if iter % 1000 == 0:
+                                print(nll.shape)
+                                print("%d %f, timed used %f" % (iter, compute_log_sum(np.stack(nll_list)), time.time() - start_time))
+                        nll = compute_log_sum(np.stack(nll_list))
+                        print("Likelihood importance sampled = %f" % nll)
+                        avg_nll.append(nll)
+                    nll = np.mean(avg_nll)
+                    writer.add_summary(sess.run(inll_summary, feed_dict={inll_ph: nll}), step)
+                    file_writer.write('%f ' % nll)
+                    print("Estimated log likelihood is %f, time elapsed %f" % (nll, time.time() - start_time))
+                else:
+                    file_writer.write('%f ' % 0)
+
+                # Compuite covdet, covdiag and mmd
+                print("---------------------> Computing fit with prior")
+                start_time = time.time()
                 covdet, covdiag = compute_covariance(conf, data, sess, encoder)
                 mmd = compute_mmd(conf, data, sess, encoder)
 
                 writer.add_summary(sess.run(covdet_summary, feed_dict={covdet_ph: covdet}), step)
                 writer.add_summary(sess.run(covdiag_summary, feed_dict={covdiag_ph: covdiag}), step)
                 writer.add_summary(sess.run(mmd_summary, feed_dict={mmd_ph: mmd}), step)
-                print("Log of covariance is %f - %f, MMD is %f" % (covdet, covdiag, mmd))
-
                 mutual_info = compute_mutual_information(data, conf, sess, encoder, compute_ll)
                 writer.add_summary(sess.run(mi_summary, feed_dict={mi_ph: mutual_info}), step)
-            if i % 100 == 0:
+                file_writer.write('%f %f %f ' % (covdet, covdiag, mmd))
+                print("Log of covariance is %f - %f, MMD is %f, time elapsed %f" % (covdet, covdiag, mmd, time.time() - start_time))
+
+                # Compute class parity
+                print("---------------------> Computing  class parity")
+                start_time = time.time()
                 c_samples = []
-                for j in range(5):
+                for j in range(100):
                     c_samples.append(generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_external_code, suff=str(i)))
+                    print("Generating %d-th batch, time elapsed %f" % (j, time.time() - start_time))
                 c_samples = np.concatenate(c_samples, axis=0)
                 ce_score, norm1_score, norm2_score = classifier.compute_score(c_samples)
                 writer.add_summary(sess.run(ce_summary, feed_dict={ce_score_ph: ce_score}), step)
                 writer.add_summary(sess.run(norm1_summary, feed_dict={norm1_score_ph: norm1_score}), step)
                 writer.add_summary(sess.run(norm2_summary, feed_dict={norm2_score_ph: norm2_score}), step)
+                file_writer.write('%f %f %f ' % (ce_score, norm1_score, norm2_score))
                 print("Class parity scores cs=%f, norm1=%f, norm2=%f" % (ce_score, norm1_score, norm2_score))
-            if (i+1) % 1000 == 0:
-                generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, suff=str(i) + "c")
 
-            # Compute test log likelihoods
-            if i % 20 == 0:
-                batch_X, batch_y = data.test.next_batch(conf.batch_size)
-                batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
-                batch_X = hard_binarize(batch_X)
-                elbo, nll = sess.run([encoder.elbo_reg, decoder.nll], feed_dict={encoder_X: batch_X, decoder_X: batch_X,
-                                                                                 external_code: np.zeros(
-                                                                                     [conf.batch_size, conf.latent_dim])})
+                # if (i+1) % 1000 == 0:
+                #     generate_ae_chain(sess, encoder_X, decoder_X, y, data, conf, external_code, suff=str(i) + "c")
+
+                # Compute log likelihood estimated by ELBO
+                print("---------------------> Estimating ELBO log likelihood")
+                start_time = time.time()
+                elbo_list = []
+                nll_list = []
+                for j in range(100):
+                    batch_X, batch_y = data.test.next_batch(conf.batch_size)
+                    batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
+                    batch_X = hard_binarize(batch_X)
+                    elbo, nll = sess.run([encoder.elbo_reg, decoder.nll], feed_dict={encoder_X: batch_X, decoder_X: batch_X,
+                                                                                     external_code: np.zeros(
+                                                                                         [conf.batch_size, conf.latent_dim])})
+                    elbo_list.append(elbo)
+                    nll_list.append(nll)
+                    print("Processing batch %d, time elapsed %f" % (j, time.time() - start_time))
+                elbo = np.mean(elbo_list)
+                nll = np.mean(nll_list)
                 writer.add_summary(sess.run(elbo_summary, feed_dict={elbo_ph: elbo}), step)
                 writer.add_summary(sess.run(nll_summary, feed_dict={nll_ph: nll}), step)
+                file_writer.write('%f %f ' % (elbo, nll))
                 print("Likelihood elbo=%f, decoder nll=%f, total=%f" % (elbo, nll, elbo+nll))
 
-            if i % 100 == 0:
-                print("Computing semi-supervised performance")
+                # Compute semi supervised performance
+                print("---------------------> Computing semi-supervised performance")
+                start_time = time.time()
                 train_features = []
                 train_labels = []
-                for j in range(10):
+                for j in range(100):
                     batch_X, train_label = data.train.next_batch(100)
                     batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
                     batch_X = hard_binarize(batch_X)
@@ -132,6 +189,7 @@ def trainAE(conf, data):
                     train_labels.append(train_label)
                 train_feature = np.concatenate(train_features, axis=0)
                 train_label = np.concatenate(train_labels, axis=0)
+                print("Extracted train features, time elapsed %f" % (time.time()-start_time))
 
                 test_features = []
                 test_labels = []
@@ -143,15 +201,33 @@ def trainAE(conf, data):
                     test_labels.append(test_label)
                 test_feature = np.concatenate(test_features, axis=0)
                 test_label = np.concatenate(test_labels)
-                accuracy, gamma = semi_supervised_learning(train_feature, train_label, test_feature, test_label)
-                print("Semi-supervised 1000 performance is %f @ gamma=%f" % (accuracy, gamma))
+                print("Extracted test features, time elapsed %f" % (time.time() - start_time))
+
+                accuracy_list = []
+                for j in range(20):
+                    random_ind = np.random.choice(train_feature.shape[0], size=1000, replace=False)
+                    accuracy, gamma = semi_supervised_learning(train_feature[random_ind, :], train_label[random_ind], test_feature, test_label)
+                    accuracy_list.append(accuracy)
+                    print("Processed %d-th batch for 1000 label semi-supervised learning, time elapsed %f" % (j, time.time() - start_time))
+                accuracy = np.mean(accuracy_list)
                 writer.add_summary(sess.run(semi_1000_summary, feed_dict={semi_1000_ph: accuracy}), step)
+                file_writer.write('%f ' % accuracy)
+                print("Semi-supervised 1000 performance is %f" % accuracy)
 
-                accuracy, gamma = semi_supervised_learning(train_feature[:100, :], train_label[:100], test_feature, test_label)
-                print("Semi-supervised 100 performance is %f @ gamma=%f" % (accuracy, gamma))
+                accuracy_list = []
+                for j in range(200):
+                    random_ind = np.random.choice(train_feature.shape[0], size=100, replace=False)
+                    accuracy, gamma = semi_supervised_learning(train_feature[random_ind, :], train_label[:100], test_feature, test_label)
+                    accuracy_list.append(accuracy)
+                    if j % 10 == 0:
+                        print("Processed %d-th batch for 1000 label semi-supervised learning, time elapsed %f" % (j, time.time() - start_time))
+                accuracy = np.mean(accuracy_list)
                 writer.add_summary(sess.run(semi_100_summary, feed_dict={semi_100_ph: accuracy}), step)
+                file_writer.write('%f ' % accuracy)
+                print("Semi-supervised 100 performance is %f" % accuracy)
 
-            if i % 100 == 0:
+                # Compute latent features
+                print("---------------------> Computing latent features")
                 latents = []
                 labels = []
                 for j in range(10):
@@ -175,6 +251,8 @@ def trainAE(conf, data):
                         point_writer.write("%f " % latent[ind, coord])
                     point_writer.write("\n")
                 point_writer.close()
+                file_writer.write('\n')
+
             decoder_loss = 0.0
             start_time = time.time()
             for j in range(conf.num_batches):
