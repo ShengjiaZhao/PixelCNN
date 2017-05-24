@@ -8,8 +8,11 @@ import subprocess
 def binarize(images):
     return (np.random.uniform(size=images.shape) < images).astype(np.float32)
 
+# def hard_binarize(images):
+#     return (0.5 * np.ones(shape=images.shape) < images).astype(np.float32)
+
 def hard_binarize(images):
-    return (0.5 * np.ones(shape=images.shape) < images).astype(np.float32)
+    return binarize(images)
 
 def generate_samples(sess, X, h, pred, conf, suff):
     print("Generating Sample Images...")

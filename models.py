@@ -53,6 +53,7 @@ class PixelCNN(object):
             self.pred = tf.nn.sigmoid(self.fc2)
             self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.fc2, labels=self.X))
             self.nll = self.loss * conf.img_width * conf.img_height
+            self.sample_nll = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.fc2, labels=self.X), axis=[1, 2, 3])
         else:
             color_dim = 256
             with tf.variable_scope("fc_2"):
@@ -107,6 +108,7 @@ class ConvolutionalEncoder(object):
             self.elbo_reg = tf.reduce_sum(-tf.log(self.stddev) + 0.5 * tf.square(self.stddev) +
                                           0.5 * tf.square(self.mean) - 0.5, axis=1)
             self.elbo_reg = tf.reduce_mean(self.elbo_reg)
+        tf.summary.scalar('avg_stddev', tf.reduce_mean(self.stddev))
         if "elbo" in conf.model:
             self.reg_loss = tf.reduce_mean(-tf.log(self.stddev) + 0.5 * tf.square(self.stddev) +
                                            0.5 * tf.square(self.mean) - 0.5)

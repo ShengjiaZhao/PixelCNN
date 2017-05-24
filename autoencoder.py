@@ -92,27 +92,31 @@ def trainAE(conf, data):
         step = 0
         for i in range(conf.epochs):
             # Compute true log likelihoods by importance sampling
-            if (i+1) % 10000 == 0:
+            if (i+1) % 40000 == 0:
                 # Compute log likelihoods
                 if conf.estimate_nll:
                     print("---------------------> Computing true log likelihood")
                     start_time = time.time()
                     avg_nll = []
-                    for _ in range(10):
+                    for _ in range(20):
+                        # Takes about 40min per batch, expected to take 20h in total
                         batch_X, batch_y = data.test.next_batch(conf.batch_size)
                         batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
                         batch_X = hard_binarize(batch_X)
                         nll_list = []
-                        for iter in range(50000):
+                        if conf.mode != 'debug':
+                            num_iter = 50000
+                        else:
+                            num_iter = 500
+                        for iter in range(num_iter):
                             random_latent = np.random.normal(size=[conf.batch_size, conf.latent_dim])
                             nll = sess.run(decoder.sample_nll, feed_dict={decoder_X: batch_X, encoder_X: batch_X, use_external_code: True,
                                                                           external_code: random_latent})
                             nll_list.append(nll)
                             if iter % 1000 == 0:
-                                print(nll.shape)
                                 print("%d %f, timed used %f" % (iter, compute_log_sum(np.stack(nll_list)), time.time() - start_time))
                         nll = compute_log_sum(np.stack(nll_list))
-                        print("Likelihood importance sampled = %f" % nll)
+                        print("Likelihood importance sampled = %f, time used %f" % (nll, time.time() - start_time))
                         avg_nll.append(nll)
                     nll = np.mean(avg_nll)
                     writer.add_summary(sess.run(inll_summary, feed_dict={inll_ph: nll}), step)
@@ -120,6 +124,7 @@ def trainAE(conf, data):
                     print("Estimated log likelihood is %f, time elapsed %f" % (nll, time.time() - start_time))
                 else:
                     file_writer.write('%f ' % 0)
+                file_writer.flush()
 
                 # Compuite covdet, covdiag and mmd
                 print("---------------------> Computing fit with prior")
@@ -133,13 +138,19 @@ def trainAE(conf, data):
                 mutual_info = compute_mutual_information(data, conf, sess, encoder, compute_ll)
                 writer.add_summary(sess.run(mi_summary, feed_dict={mi_ph: mutual_info}), step)
                 file_writer.write('%f %f %f ' % (covdet, covdiag, mmd))
+                file_writer.flush()
                 print("Log of covariance is %f - %f, MMD is %f, time elapsed %f" % (covdet, covdiag, mmd, time.time() - start_time))
 
                 # Compute class parity
-                print("---------------------> Computing  class parity")
+                print("---------------------> Computing class parity")
                 start_time = time.time()
                 c_samples = []
-                for j in range(100):
+                if conf.mode != 'debug':
+                    num_iter = 100
+                else:
+                    num_iter = 5
+                for j in range(num_iter):
+                    # Takes about 30s each iteration
                     c_samples.append(generate_ae(sess, encoder_X, decoder_X, y, data, conf, external_code, use_external_code, suff=str(i)))
                     print("Generating %d-th batch, time elapsed %f" % (j, time.time() - start_time))
                 c_samples = np.concatenate(c_samples, axis=0)
@@ -148,6 +159,7 @@ def trainAE(conf, data):
                 writer.add_summary(sess.run(norm1_summary, feed_dict={norm1_score_ph: norm1_score}), step)
                 writer.add_summary(sess.run(norm2_summary, feed_dict={norm2_score_ph: norm2_score}), step)
                 file_writer.write('%f %f %f ' % (ce_score, norm1_score, norm2_score))
+                file_writer.flush()
                 print("Class parity scores cs=%f, norm1=%f, norm2=%f" % (ce_score, norm1_score, norm2_score))
 
                 # if (i+1) % 1000 == 0:
@@ -173,6 +185,7 @@ def trainAE(conf, data):
                 writer.add_summary(sess.run(elbo_summary, feed_dict={elbo_ph: elbo}), step)
                 writer.add_summary(sess.run(nll_summary, feed_dict={nll_ph: nll}), step)
                 file_writer.write('%f %f ' % (elbo, nll))
+                file_writer.flush()
                 print("Likelihood elbo=%f, decoder nll=%f, total=%f" % (elbo, nll, elbo+nll))
 
                 # Compute semi supervised performance
@@ -180,7 +193,7 @@ def trainAE(conf, data):
                 start_time = time.time()
                 train_features = []
                 train_labels = []
-                for j in range(100):
+                for j in range(300):
                     batch_X, train_label = data.train.next_batch(100)
                     batch_X = batch_X.reshape(conf.batch_size, conf.img_height, conf.img_width, conf.channel)
                     batch_X = hard_binarize(batch_X)
@@ -189,7 +202,7 @@ def trainAE(conf, data):
                     train_labels.append(train_label)
                 train_feature = np.concatenate(train_features, axis=0)
                 train_label = np.concatenate(train_labels, axis=0)
-                print("Extracted train features, time elapsed %f" % (time.time()-start_time))
+                print("Extracted train features, time elapsed %f, total_samples %d" % (time.time()-start_time, train_feature.shape[0]))
 
                 test_features = []
                 test_labels = []
@@ -204,7 +217,11 @@ def trainAE(conf, data):
                 print("Extracted test features, time elapsed %f" % (time.time() - start_time))
 
                 accuracy_list = []
-                for j in range(20):
+                if conf.mode != 'debug':
+                    num_iter = 50
+                else:
+                    num_iter = 5
+                for j in range(num_iter):
                     random_ind = np.random.choice(train_feature.shape[0], size=1000, replace=False)
                     accuracy, gamma = semi_supervised_learning(train_feature[random_ind, :], train_label[random_ind], test_feature, test_label)
                     accuracy_list.append(accuracy)
@@ -212,22 +229,29 @@ def trainAE(conf, data):
                 accuracy = np.mean(accuracy_list)
                 writer.add_summary(sess.run(semi_1000_summary, feed_dict={semi_1000_ph: accuracy}), step)
                 file_writer.write('%f ' % accuracy)
+                file_writer.flush()
                 print("Semi-supervised 1000 performance is %f" % accuracy)
 
                 accuracy_list = []
-                for j in range(200):
+                if conf.mode != 'debug':
+                    num_iter = 500
+                else:
+                    num_iter = 50
+                for j in range(num_iter):
                     random_ind = np.random.choice(train_feature.shape[0], size=100, replace=False)
-                    accuracy, gamma = semi_supervised_learning(train_feature[random_ind, :], train_label[:100], test_feature, test_label)
+                    accuracy, gamma = semi_supervised_learning(train_feature[random_ind, :], train_label[random_ind], test_feature, test_label)
                     accuracy_list.append(accuracy)
                     if j % 10 == 0:
                         print("Processed %d-th batch for 1000 label semi-supervised learning, time elapsed %f" % (j, time.time() - start_time))
                 accuracy = np.mean(accuracy_list)
                 writer.add_summary(sess.run(semi_100_summary, feed_dict={semi_100_ph: accuracy}), step)
                 file_writer.write('%f ' % accuracy)
+                file_writer.flush()
                 print("Semi-supervised 100 performance is %f" % accuracy)
 
                 # Compute latent features
                 print("---------------------> Computing latent features")
+                start_time = time.time()
                 latents = []
                 labels = []
                 for j in range(10):
@@ -252,6 +276,8 @@ def trainAE(conf, data):
                     point_writer.write("\n")
                 point_writer.close()
                 file_writer.write('\n')
+                file_writer.flush()
+                print("Finished computing latent features, time elapsed %f" % (time.time() - start_time))
 
             decoder_loss = 0.0
             start_time = time.time()
@@ -297,7 +323,7 @@ def semi_supervised_learning(train_feature, train_label, test_feature, test_labe
         if correct_count > optimal_accuracy:
             optimal_accuracy = correct_count
             optimal_gamma = gamma
-        print("%f %d" % (gamma, correct_count))
+        # print("%f %d" % (gamma, correct_count))
         gamma *= 2.0
         if gamma > 100.0:
             break

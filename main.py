@@ -67,6 +67,8 @@ if __name__ == "__main__":
     parser.add_argument('--summary_path', type=str, default='logs')
     parser.add_argument('--latent_dim', type=int, default=10)
     parser.add_argument('--gpu', type=int, default=0)
+    parser.add_argument('--estimate_nll', type=bool, default=False)
+    parser.add_argument('--mode', type=str, default='debug')
     conf = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = '%d' % conf.gpu
