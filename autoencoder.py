@@ -45,7 +45,7 @@ def trainAE(conf, data):
     gpu_options = tf.GPUOptions(allow_growth=True)
 
     classifier = Classifier()
-    file_writer = open(os.path.join(conf.summary_path, 'results.txt'), 'w')
+    file_writer = open(os.path.join(conf.summary_path, 'results.txt'), 'a')
 
     # fig, ax = plt.subplots()
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:

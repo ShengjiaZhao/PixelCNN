@@ -55,7 +55,7 @@ if __name__ == "__main__":
     parser.add_argument('--data', type=str, default='mnist')
     parser.add_argument('--layers', type=int, default=12)
     parser.add_argument('--f_map', type=int, default=32)
-    parser.add_argument('--epochs', type=int, default=100000)
+    parser.add_argument('--epochs', type=int, default=1000000)
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--grad_clip', type=int, default=1)
     parser.add_argument('--model', type=str, default='')
