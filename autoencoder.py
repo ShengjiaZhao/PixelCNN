@@ -92,7 +92,7 @@ def trainAE(conf, data):
         step = 0
         for i in range(conf.epochs):
             # Compute true log likelihoods by importance sampling
-            if (i+1) % 40000 == 0:
+            if (conf.mode != 'debug' and (i+1) % 40000 == 0) or (conf.mode == 'debug' and i % 40000 == 0):
                 # Compute log likelihoods
                 if conf.estimate_nll:
                     print("---------------------> Computing true log likelihood")
